@@ -22,7 +22,7 @@
     .enumeration-answers li { list-style: none; }
 </style>
 
-<div id="results-inner" data-tos-id="{{ $tos->id }}">
+<div id="results-inner" data-tos-id="{{ $tos->uuid }}">
 
     <h1 class="subject-line">{{ $tos->course }}</h1>
     <p class="topic-line">{{ $tos->lessons->count() }} lesson(s) &middot; {{ $tos->total_items }} total items</p>
@@ -118,6 +118,9 @@
                             <div class="question-body">
                                 <div class="question-head">
                                     <p class="question-text">{{ $i + 1 }}. {{ $q->question }}</p>
+                                    @if ($q->item_number !== null)
+                                        <span class="tab-level tab-item-code">{{ $lesson->letter }}{{ $q->item_number }}</span>
+                                    @endif
                                     <span class="tab-level">{{ $q->bloom_level }}</span>
                                     <span class="tab-level tab-type">{{ $typeLabel[$qType] ?? $qType }}</span>
                                 </div>
@@ -168,6 +171,64 @@
             </div>
         </div>
     @endforeach
+
+    @if (!empty($itemPlacement))
+        <h2 class="section-title" style="margin-top: 2.5rem;">Item Placement</h2>
+        <p class="field-hint" style="margin-bottom: 0.75rem;">
+            Item codes are lesson letter + sequence (A1, A2, B1, ...). Spread across
+            {{ count($itemPlacement) }} sections so no section is dominated by one lesson.
+        </p>
+        <table class="tos-grid">
+            <thead>
+                <tr>
+                    <th>Section</th>
+                    <th>Item Numbers</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($itemPlacement as $section => $codes)
+                    <tr>
+                        <td class="level-name">{{ $section }}</td>
+                        <td>{{ implode(', ', $codes) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
+    @if ($tos->examQuestions->isNotEmpty())
+        <a href="{{ route('tos.export-exam-pdf', $tos) }}" target="_blank" class="btn-seal" style="display:inline-block; margin: 1rem 0 0.5rem;">
+            Export Generated Exam (PDF)
+        </a>
+        <p class="field-hint" style="margin-bottom: 1rem;">
+            Blank student copy — questions and options only, no answer key. Math renders the same as above.
+        </p>
+
+        <details class="export-pdf-panel" style="margin: 1rem 0;">
+            <summary style="cursor:pointer; font-weight:600;">Export as CvSU Table of Specification (PDF)</summary>
+            <form action="{{ route('tos.export-pdf', $tos) }}" method="GET" target="_blank" style="margin-top:0.75rem; display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
+                <input type="text" name="department" placeholder="Department (optional)">
+                <input type="text" name="semester" placeholder="Semester, e.g. 2nd Semester (optional)">
+                <input type="text" name="academic_year" placeholder="Academic Year, e.g. A.Y. 2025-2026 (optional)">
+                <select name="exam_period">
+                    <option value="">Exam period (optional)</option>
+                    <option value="Midterms">Midterms</option>
+                    <option value="Finals">Finals</option>
+                </select>
+                <input type="text" name="course_outcome" placeholder="Course Outcome (optional)" style="grid-column: 1 / -1;">
+                <input type="text" name="prepared_by" placeholder="Prepared by — name (optional)">
+                <input type="text" name="prepared_by_title" placeholder="Prepared by — title (optional)">
+                <input type="text" name="reviewed_by" placeholder="Reviewed by — name (optional)">
+                <input type="text" name="reviewed_by_title" placeholder="Reviewed by — title (optional)">
+                <input type="text" name="approved_by" placeholder="Approved by — name (optional)">
+                <input type="text" name="approved_by_title" placeholder="Approved by — title (optional)">
+                <button type="submit" class="btn-seal" style="grid-column: 1 / -1;">Download PDF</button>
+            </form>
+            <p class="field-hint" style="margin-top:0.5rem;">
+                Anything left blank prints as a blank line on the form, same as a paper copy you'd fill in by hand.
+            </p>
+        </details>
+    @endif
 
     @if ($tos->examQuestions->isEmpty())
         <form id="generate-exam-form" data-action="{{ route('tos.generate-exam', $tos) }}">

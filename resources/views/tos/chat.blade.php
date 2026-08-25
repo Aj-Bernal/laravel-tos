@@ -39,7 +39,7 @@
 
         <form id="chat-input-bar">
             <button type="button" id="chat-attach-btn" title="Attach PDF" style="display:none;">📎</button>
-            <input type="file" id="chat-file-input" accept="application/pdf" multiple style="display:none;">
+            <input type="file" id="chat-file-input" accept="application/pdf,image/jpeg,image/png" multiple style="display:none;">
             <textarea id="chat-text-input" rows="1" placeholder="Type your answer…" autocomplete="off"></textarea>
             <button type="submit" id="chat-send-btn">Send</button>
         </form>

@@ -97,7 +97,7 @@
 
             <div class="field-group" style="margin-bottom: 0;">
                 <label>Lecture Material (PDF)</label>
-                <input type="file" data-field="pdf" class="field-blank" accept="application/pdf" required>
+                <input type="file" data-field="pdf" class="field-blank" accept="application/pdf,image/jpeg,image/png" required>
                 <p class="field-hint" data-file-confirm style="display:none;"></p>
             </div>
         </div>
@@ -107,7 +107,7 @@
 {{-- ===================== Results panel ===================== --}}
 <div id="results-container">
     @isset($tos)
-        @include('tos._results', ['tos' => $tos])
+        @include('tos._results', ['tos' => $tos, 'itemPlacement' => $itemPlacement ?? []])
     @endisset
 </div>
 
@@ -201,6 +201,7 @@
     // WITHOUT a real navigation — pushState only changes the address bar.
     function renderResults(html, tosId) {
         resultsContainer.innerHTML = html;
+        window.renderMath(resultsContainer);
         createPanel.style.display = 'none';
         if (tosId) {
             const newUrl = '{{ url('/tos') }}/' + tosId;

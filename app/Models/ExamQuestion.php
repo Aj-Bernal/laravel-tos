@@ -13,15 +13,22 @@ class ExamQuestion extends Model
     protected $fillable = [
         'tos_id',
         'lesson_id',
+        'item_number',
         'bloom_level',
+        'question_type',
         'question',
         'options',
         'correct_answer',
+        'is_true',
+        'correction',
+        'accepted_answers',
         'rationale',
     ];
 
     protected $casts = [
         'options' => 'array',
+        'is_true' => 'boolean',
+        'accepted_answers' => 'array',
     ];
 
     public function tos(): BelongsTo

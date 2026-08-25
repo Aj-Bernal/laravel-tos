@@ -26,15 +26,16 @@ window.addEventListener('error', function (e) {
     let step = 'course';           // current question being answered
     let course = '';
     let totalItems = 50;
-    let lessons = [];              // finalized lessons: {title, weight, objectives_text, pdfFile}
+    let lessons = [];              // finalized lessons: {title, objectives: [{text, weight}], pdfFile}
     let tosId = null;
 
     // ---- Parses one pasted block of lessons into structured lesson objects ----
-    // Expected format, blank line between lessons:
+    // Expected format, blank line between lessons. Each outcome (ILO) carries
+    // its own hours, matching the real CvSU TOS grain — a topic can have
+    // several ILOs, each with its own instructional-time allocation:
     //   Lesson: <title>
-    //   Weight: <hours>
-    //   - <outcome 1>
-    //   - <outcome 2>
+    //   - Weight: <hours> | <outcome 1>
+    //   - Weight: <hours> | <outcome 2>
     function parseLessonsBlock(text) {
         const blocks = text.split(/\n(?=\s*Lesson\s*:)/i).map(function (b) { return b.trim(); }).filter(Boolean);
         const parsed = [];
@@ -43,23 +44,32 @@ window.addEventListener('error', function (e) {
         blocks.forEach(function (block, idx) {
             const lines = block.split('\n').map(function (l) { return l.trim(); }).filter(function (l) { return l !== ''; });
             let title = null;
-            let weight = null;
-            const objectiveLines = [];
+            const objectives = [];
+            const badLines = [];
 
             lines.forEach(function (line) {
                 const titleMatch = line.match(/^Lesson\s*:\s*(.+)$/i);
-                const weightMatch = line.match(/^Weight\s*:\s*([\d.]+)/i);
                 if (titleMatch) { title = titleMatch[1].trim(); return; }
-                if (weightMatch) { weight = parseFloat(weightMatch[1]); return; }
+
                 const cleaned = line.replace(/^[-*•]\s*/, '');
-                if (cleaned) objectiveLines.push(cleaned);
+                const outcomeMatch = cleaned.match(/^Weight\s*:\s*([\d.]+)\s*\|\s*(.+)$/i);
+                if (outcomeMatch) {
+                    objectives.push({ weight: parseFloat(outcomeMatch[1]), text: outcomeMatch[2].trim() });
+                } else if (cleaned) {
+                    badLines.push(cleaned);
+                }
             });
 
             if (!title) { errors.push('Block ' + (idx + 1) + ': missing a "Lesson: <title>" line.'); return; }
-            if (!weight || weight <= 0) { errors.push('"' + title + '": missing or invalid "Weight: <number>" line.'); return; }
-            if (objectiveLines.length === 0) { errors.push('"' + title + '": no learning outcomes found — add at least one line starting with "-".'); return; }
+            if (badLines.length > 0) {
+                errors.push('"' + title + '": each outcome line needs its own hours, like "- Weight: 3 | ' + badLines[0] + '".');
+                return;
+            }
+            if (objectives.length === 0) { errors.push('"' + title + '": no learning outcomes found — add at least one "- Weight: <hours> | <outcome>" line.'); return; }
+            const invalidWeight = objectives.find(function (o) { return !o.weight || o.weight <= 0; });
+            if (invalidWeight) { errors.push('"' + title + '": every outcome needs a positive hours value.'); return; }
 
-            parsed.push({ title: title, weight: weight, objectives_text: objectiveLines.join('\n') });
+            parsed.push({ title: title, objectives: objectives });
         });
 
         if (blocks.length === 0) {
@@ -80,6 +90,7 @@ window.addEventListener('error', function (e) {
         bubble.className = html ? 'msg-bubble result-card' : 'msg-bubble';
         if (html) {
             bubble.innerHTML = html;
+            window.renderMath(bubble);
         } else {
             bubble.textContent = text;
         }
@@ -166,11 +177,12 @@ window.addEventListener('error', function (e) {
     }
     function askLessonsBlock() {
         return botSay(
-            'Now send me all your lessons in one message — one block per lesson, blank line between them:\n\n' +
-            'Lesson: <title>\nWeight: <hours>\n- <learning outcome 1>\n- <learning outcome 2>\n\n' +
+            'Now send me all your lessons in one message — one block per lesson, blank line between them. ' +
+            'Each learning outcome gets its own hours (this is how the official TOS splits instructional time per outcome, not per lesson):\n\n' +
+            'Lesson: <title>\n- Weight: <hours> | <learning outcome 1>\n- Weight: <hours> | <learning outcome 2>\n\n' +
             'Example:\n\n' +
-            'Lesson: Binary Search Trees\nWeight: 3\n- Students will differentiate a BST from a balanced tree.\n- Students will design an algorithm to balance an unbalanced tree.\n\n' +
-            'Lesson: AVL Trees\nWeight: 2\n- Students will explain rotation operations.\n\n' +
+            'Lesson: Binary Search Trees\n- Weight: 2 | Students will differentiate a BST from a balanced tree.\n- Weight: 1 | Students will design an algorithm to balance an unbalanced tree.\n\n' +
+            'Lesson: AVL Trees\n- Weight: 2 | Students will explain rotation operations.\n\n' +
             'Paste as many lessons as you want — I\'ll read them all at once.'
         ).then(function () {
             step = 'lessons_block';
@@ -208,7 +220,7 @@ window.addEventListener('error', function (e) {
 
         if (step === 'lessons_block') {
             const text = String(value).trim();
-            if (!text) return botSay('Paste your lessons using the format above — each one needs a title, weight, and at least one outcome.');
+            if (!text) return botSay('Paste your lessons using the format above — each one needs a title and at least one outcome with its own hours.');
 
             const result = parseLessonsBlock(text);
             if (result.errors.length) {
@@ -262,8 +274,10 @@ window.addEventListener('error', function (e) {
             formData.append('total_items', totalItems);
             lessons.forEach(function (lesson, i) {
                 formData.append('lessons[' + i + '][title]', lesson.title);
-                formData.append('lessons[' + i + '][weight]', lesson.weight);
-                formData.append('lessons[' + i + '][objectives_text]', lesson.objectives_text);
+                lesson.objectives.forEach(function (objective, j) {
+                    formData.append('lessons[' + i + '][objectives][' + j + '][text]', objective.text);
+                    formData.append('lessons[' + i + '][objectives][' + j + '][weight]', objective.weight);
+                });
                 formData.append('lessons[' + i + '][pdf]', lesson.pdfFile);
             });
 

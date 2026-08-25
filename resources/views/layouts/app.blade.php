@@ -8,6 +8,34 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('css/tos-theme.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
+        onload="window.__katexReady = true;"></script>
+    <script>
+        // Renders $...$ / $$...$$ math notation inside the given element (or
+        // the whole page if no element is passed). Exposed globally so any
+        // script that swaps in fresh HTML (AJAX results fragment, chat
+        // bubbles) can call it after the swap — auto-render only scans the
+        // DOM once at load time on its own, it doesn't watch for new nodes.
+        window.renderMath = function (el) {
+            if (typeof renderMathInElement === 'undefined') {
+                // KaTeX's script tags are deferred and may not have finished
+                // loading yet (e.g. a very fast AJAX swap right after page
+                // load) — retry shortly rather than silently doing nothing.
+                setTimeout(function () { window.renderMath(el); }, 150);
+                return;
+            }
+            renderMathInElement(el || document.body, {
+                delimiters: [
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
+                ],
+                throwOnError: false,
+            });
+        };
+        document.addEventListener('DOMContentLoaded', function () { window.renderMath(); });
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
     <style>

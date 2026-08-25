@@ -55,6 +55,18 @@ class ExamGeneratorService
     private const INITIAL_BACKOFF_SECONDS = 3;
 
     /**
+     * Firing every lesson's Gemini call at once via Http::pool blows past
+     * the free tier's requests-per-minute cap in one burst, so every
+     * request in the pool comes back 429 together and even the sequential
+     * retry-with-backoff can't recover (they all retry into the same
+     * exhausted window). Chunking the pool keeps some concurrency while
+     * staying under the per-minute limit — tune BATCH_SIZE down (or
+     * BATCH_DELAY_SECONDS up) if you still see 429s across a whole batch.
+     */
+    private const BATCH_SIZE = 3;
+    private const BATCH_DELAY_SECONDS = 20;
+
+    /**
      * Single-lesson generation (kept for backward compatibility / simple use).
      *
      * @param string $lessonText Extracted PDF lesson content
@@ -100,90 +112,97 @@ class ExamGeneratorService
 
         $lessonIds = array_keys($lessonJobs);
         $typeCountsByLesson = [];
-
-        $responses = Http::pool(function ($pool) use ($lessonJobs, $apiKey, $course, $lessonIds, &$typeCountsByLesson) {
-            $requests = [];
-            foreach ($lessonIds as $lessonId) {
-                $job = $lessonJobs[$lessonId];
-                $typeCounts = $this->autoAssignTypes($job['level_counts']);
-                $typeCountsByLesson[$lessonId] = $typeCounts;
-
-                $prompt = $this->buildPrompt(
-                    $job['lesson_text'],
-                    $typeCounts,
-                    $course,
-                    $job['lesson_title'] ?? null
-                );
-
-                $requests[] = $pool->withHeaders($this->headers($apiKey))
-                    ->timeout(120)
-                    ->post(self::API_URL, $this->body($prompt));
-            }
-
-            return $requests;
-        });
-
         $results = [];
 
-        foreach ($lessonIds as $index => $lessonId) {
-            $response = $responses[$index];
+        $batches = array_chunk($lessonIds, self::BATCH_SIZE);
 
-            // Pooled requests fire simultaneously, which is exactly what
-            // trips a free-tier rate limit. If a lesson's request came back
-            // 429/503, retry it here ONE AT A TIME (not pooled) with
-            // backoff — sequential + delayed is far less likely to re-hit
-            // the same burst limit than firing it again alongside its
-            // siblings would be.
-            if (!($response instanceof \Throwable) && in_array($response->status(), self::RETRYABLE_STATUSES, true)) {
-                Log::info("[ExamGen] Lesson {$lessonId} hit {$response->status()} in the pool — retrying sequentially.");
-
-                $job = $lessonJobs[$lessonId];
-                $prompt = $this->buildPrompt(
-                    $job['lesson_text'],
-                    $typeCountsByLesson[$lessonId],
-                    $course,
-                    $job['lesson_title'] ?? null
-                );
-
-                try {
-                    $response = $this->postWithRetry($prompt, $apiKey);
-                } catch (\Throwable $e) {
-                    $response = $e;
-                }
+        foreach ($batches as $batchIndex => $batchLessonIds) {
+            if ($batchIndex > 0) {
+                sleep(self::BATCH_DELAY_SECONDS);
             }
 
-            try {
-                if ($response instanceof \Throwable) {
-                    throw $response;
+            $responses = Http::pool(function ($pool) use ($lessonJobs, $apiKey, $course, $batchLessonIds, &$typeCountsByLesson) {
+                $requests = [];
+                foreach ($batchLessonIds as $lessonId) {
+                    $job = $lessonJobs[$lessonId];
+                    $typeCounts = $this->autoAssignTypes($job['level_counts']);
+                    $typeCountsByLesson[$lessonId] = $typeCounts;
+
+                    $prompt = $this->buildPrompt(
+                        $job['lesson_text'],
+                        $typeCounts,
+                        $course,
+                        $job['lesson_title'] ?? null
+                    );
+
+                    $requests[] = $pool->withHeaders($this->headers($apiKey))
+                        ->timeout(120)
+                        ->post(self::API_URL, $this->body($prompt));
                 }
 
-                if ($response->failed()) {
-                    throw new RuntimeException('API call failed: ' . $response->body());
+                return $requests;
+            });
+
+            foreach ($batchLessonIds as $index => $lessonId) {
+                $response = $responses[$index];
+
+                // A batch can still trip the limit together. If a lesson's
+                // request came back 429/503, retry it here ONE AT A TIME
+                // (not pooled) with backoff — sequential + delayed is far
+                // less likely to re-hit the same burst limit than firing it
+                // again alongside its batch-mates would be.
+                if (!($response instanceof \Throwable) && in_array($response->status(), self::RETRYABLE_STATUSES, true)) {
+                    Log::info("[ExamGen] Lesson {$lessonId} hit {$response->status()} in the pool — retrying sequentially.");
+
+                    $job = $lessonJobs[$lessonId];
+                    $prompt = $this->buildPrompt(
+                        $job['lesson_text'],
+                        $typeCountsByLesson[$lessonId],
+                        $course,
+                        $job['lesson_title'] ?? null
+                    );
+
+                    try {
+                        $response = $this->postWithRetry($prompt, $apiKey);
+                    } catch (\Throwable $e) {
+                        $response = $e;
+                    }
                 }
 
-                $text = $this->extractText($response->json());
-                $questions = $this->parseQuestionsJson($text);
+                try {
+                    if ($response instanceof \Throwable) {
+                        throw $response;
+                    }
 
-                $job = $lessonJobs[$lessonId];
-                $questions = $this->backfillMissingLevels(
-                    $questions,
-                    $typeCountsByLesson[$lessonId],
-                    $job['lesson_text'],
-                    $course,
-                    $job['lesson_title'] ?? null,
-                    $apiKey
-                );
+                    if ($response->failed()) {
+                        throw new RuntimeException('API call failed: ' . $response->body());
+                    }
 
-                $results[$lessonId] = [
-                    'questions' => $questions,
-                    'error' => null,
-                ];
-            } catch (\Throwable $e) {
-                $title = $lessonJobs[$lessonId]['lesson_title'] ?? "Lesson {$lessonId}";
-                $results[$lessonId] = [
-                    'questions' => [],
-                    'error' => "{$title}: " . $e->getMessage(),
-                ];
+                    $text = $this->extractText($response->json());
+                    $questions = $this->parseQuestionsJson($text);
+
+                    $job = $lessonJobs[$lessonId];
+                    $questions = $this->backfillMissingLevels(
+                        $questions,
+                        $typeCountsByLesson[$lessonId],
+                        $job['lesson_text'],
+                        $course,
+                        $job['lesson_title'] ?? null,
+                        $apiKey
+                    );
+
+                    $results[$lessonId] = [
+                        'questions' => $questions,
+                        'error' => null,
+                    ];
+                } catch (\Throwable $e) {
+                    $title = $lessonJobs[$lessonId]['lesson_title'] ?? "Lesson {$lessonId}";
+                    Log::error("[ExamGen] Lesson {$lessonId} ('{$title}') failed: " . $e->getMessage());
+                    $results[$lessonId] = [
+                        'questions' => [],
+                        'error' => "{$title}: " . $e->getMessage(),
+                    ];
+                }
             }
         }
 
@@ -246,7 +265,7 @@ class ExamGeneratorService
         ?string $lessonTitle,
         string $apiKey
     ): array {
-        for ($pass = 0; $pass < 2; $pass++) {
+        for ($pass = 0; $pass < 3; $pass++) {
             $have = collect($questions)->countBy(
                 fn ($q) => ($q['bloom_level'] ?? '') . '|' . ($q['question_type'] ?? 'multiple_choice')
             );
@@ -316,11 +335,37 @@ PROMPT;
 
                 $questions = array_merge($questions, $extra);
             } catch (\Throwable $e) {
+                Log::warning("[ExamGen] Backfill pass {$pass} threw for lesson '{$lessonTitle}': " . $e->getMessage());
                 break;
             }
         }
 
+        $stillMissing = $this->countStillMissing($questions, $typeCounts);
+        if ($stillMissing > 0) {
+            Log::warning("[ExamGen] Lesson '{$lessonTitle}' is short {$stillMissing} item(s) after all backfill passes — check maxOutputTokens / prompt complexity for this quota size.");
+        }
+
         return $questions;
+    }
+
+    /**
+     * @param array<string, array<string, int>> $typeCounts Bloom level => [type => count]
+     */
+    private function countStillMissing(array $questions, array $typeCounts): int
+    {
+        $have = collect($questions)->countBy(
+            fn ($q) => ($q['bloom_level'] ?? '') . '|' . ($q['question_type'] ?? 'multiple_choice')
+        );
+
+        $missing = 0;
+        foreach ($typeCounts as $level => $types) {
+            foreach ($types as $type => $n) {
+                $got = $have[$level . '|' . $type] ?? 0;
+                $missing += max(0, $n - $got);
+            }
+        }
+
+        return $missing;
     }
 
     /**
@@ -395,8 +440,17 @@ PROMPT;
                 ],
             ],
             'generationConfig' => [
-                'maxOutputTokens' => 4096,
+                // Gemini 2.5 models spend part of maxOutputTokens on hidden
+                // "thinking" tokens before writing the actual JSON. This task
+                // needs no chain-of-thought — thinkingBudget: 0 turns that off
+                // so the full token budget goes to the question objects
+                // themselves (faster and cheaper too). 8192 (up from 4096)
+                // gives headroom for a large lesson's full item count (~19+
+                // fully-detailed question objects) without truncating the
+                // JSON array mid-generation.
+                'maxOutputTokens' => 8192,
                 'responseMimeType' => 'application/json',
+                'thinkingConfig' => ['thinkingBudget' => 0],
             ],
         ];
     }
@@ -421,6 +475,14 @@ PROMPT;
     private function typeSchemaInstructions(): string
     {
         return <<<TXT
+NOTATION: whenever a question involves a mathematical expression, formula,
+equation, or algorithmic notation (e.g. Big-O complexity, set notation,
+summations, matrix/array indices), write it in LaTeX inside the "question"
+text — inline as \$...\$ or, for a standalone equation on its own line, as
+\$\$...\$\$. Do not describe math in plain words when LaTeX can express it
+exactly (e.g. write "\$O(n \\log n)\$", not "O of n log n"). Leave ordinary
+prose outside the \$...\$ delimiters as normal text.
+
 Each question object's shape depends on its "question_type":
 
 1. "multiple_choice":
@@ -512,35 +574,14 @@ PROMPT;
         $decoded = json_decode($clean, true);
 
         if (json_last_error() !== JSON_ERROR_NONE || !isset($decoded['questions']) || !is_array($decoded['questions'])) {
-            // TEMP DIAGNOSTIC — remove once the mismatch is found.
-            Log::warning('[ExamGen] Failed to parse questions JSON at all.', [
-                'json_error' => json_last_error_msg(),
-                'raw_snippet' => substr($clean, 0, 2000),
-            ]);
             throw new RuntimeException('Failed to parse exam questions JSON from model response.');
         }
-
-        // TEMP DIAGNOSTIC — remove once the mismatch is found.
-        Log::info('[ExamGen] Raw questions before validation filter.', [
-            'count_raw' => count($decoded['questions']),
-            'items' => $decoded['questions'],
-        ]);
 
         // Filter out any individual items that don't match their declared
         // question_type's required shape, rather than failing the whole
         // batch — the backfill pass will pick up the slack for whatever
         // gets dropped here.
         $valid = array_values(array_filter($decoded['questions'], [$this, 'isValidQuestion']));
-
-        // TEMP DIAGNOSTIC — remove once the mismatch is found.
-        $rejected = array_values(array_filter($decoded['questions'], fn ($q) => !$this->isValidQuestion($q)));
-        if (!empty($rejected)) {
-            Log::warning('[ExamGen] Some items were rejected by isValidQuestion.', [
-                'count_raw' => count($decoded['questions']),
-                'count_valid' => count($valid),
-                'rejected' => $rejected,
-            ]);
-        }
 
         return $valid;
     }
@@ -555,7 +596,7 @@ PROMPT;
 
         return match ($type) {
             'multiple_choice' => isset($q['options']['A'], $q['options']['B'], $q['options']['C'], $q['options']['D'])
-                && !empty($q['correct_answer']),
+                && in_array($q['correct_answer'], ['A', 'B', 'C', 'D'], true),
             'modified_true_false' => array_key_exists('is_true', $q)
                 && ($q['is_true'] === true || !empty($q['correction'])),
             'enumeration' => !empty($q['accepted_answers']) && is_array($q['accepted_answers']),

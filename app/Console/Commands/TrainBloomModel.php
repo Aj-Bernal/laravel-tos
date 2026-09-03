@@ -31,24 +31,30 @@ class TrainBloomModel extends Command
 
         $this->info('Building vocabulary from '.count($samples).' labeled objectives...');
 
-        $vocab = [];
+        // Unigrams + bigrams (see BloomClassifierService::ngrams) so the
+        // model can key off cue-verb + object phrases ("identify the root
+        // cause"), not just isolated words that repeat across every level.
+        $vocabCounts = [];
         foreach ($samples as [$text, $label]) {
-            foreach (BloomClassifierService::tokenize($text) as $tok) {
-                $vocab[$tok] = true;
+            foreach (BloomClassifierService::ngrams($text) as $tok) {
+                $vocabCounts[$tok] = ($vocabCounts[$tok] ?? 0) + 1;
             }
         }
-        $vocab = array_keys($vocab);
+        // Drop hapax legomena (n-grams seen only once) — with bigrams the
+        // vocabulary explodes and singletons are almost always noise that
+        // just lets the model memorize individual training sentences.
+        $vocab = array_keys(array_filter($vocabCounts, fn ($c) => $c >= 2));
         sort($vocab);
         $vocabIndex = array_flip($vocab);
         $vocabSize = count($vocab);
 
-        $this->info("Vocabulary size: {$vocabSize} words");
+        $this->info("Vocabulary size: {$vocabSize} n-grams (min doc freq 2)");
 
         $X = [];
         $y = [];
         foreach ($samples as [$text, $label]) {
             $vec = array_fill(0, $vocabSize, 0.0);
-            foreach (BloomClassifierService::tokenize($text) as $tok) {
+            foreach (BloomClassifierService::ngrams($text) as $tok) {
                 if (isset($vocabIndex[$tok])) {
                     $vec[$vocabIndex[$tok]] += 1.0;
                 }

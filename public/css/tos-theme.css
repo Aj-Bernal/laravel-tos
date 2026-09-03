@@ -147,6 +147,14 @@ body {
     padding: 2rem;
 }
 
+.bulk-import-box {
+    background: var(--paper-cream, #faf7f0);
+    border: 1px dashed var(--paper-line);
+    border-radius: 4px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2rem;
+}
+
 .field-group { margin-bottom: 1.75rem; }
 
 .field-group label {

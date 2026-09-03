@@ -61,14 +61,37 @@ class BloomClassifierService
     }
 
     /**
-     * Bag-of-words feature vector against the trained vocabulary.
+     * Unigrams + bigrams ("evaluate", "evaluate the", "the fairness").
+     *
+     * Bloom's level is usually signaled by a cue VERB + its OBJECT
+     * together ("identify the root cause" = Analyzing, not the isolated
+     * word "identify" which appears across every level). A pure unigram
+     * bag-of-words can't see that; bigrams give the classifier access to
+     * that local phrase context without needing a full parser.
+     *
+     * @return string[]
+     */
+    public static function ngrams(string $text): array
+    {
+        $tokens = self::tokenize($text);
+        $grams = $tokens;
+
+        for ($i = 0; $i < count($tokens) - 1; $i++) {
+            $grams[] = $tokens[$i].'_'.$tokens[$i + 1];
+        }
+
+        return $grams;
+    }
+
+    /**
+     * Bag-of-(uni+bi)grams feature vector against the trained vocabulary.
      *
      * @return float[]
      */
     private function featurize(string $text, array $vocabIndex, int $vocabSize): array
     {
         $vec = array_fill(0, $vocabSize, 0.0);
-        foreach (self::tokenize($text) as $tok) {
+        foreach (self::ngrams($text) as $tok) {
             if (isset($vocabIndex[$tok])) {
                 $vec[$vocabIndex[$tok]] += 1.0;
             }

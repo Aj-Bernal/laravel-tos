@@ -122,6 +122,21 @@
             font-weight: bold;
         }
 
+        .draw-box {
+            margin: 6px 0 0;
+            border: 1px solid #999;
+            min-height: 130px;
+            max-height: 130px;
+        }
+        .draw-box.answer-key {
+            min-height: 0;
+            max-height: none;
+            border: 1px dashed #999;
+            padding: 6px 8px;
+        }
+        .trace-steps { margin: 0; padding-left: 14px; }
+        .trace-steps li { margin-bottom: 2px; }
+
         .rationale {
             margin-top: 4px;
             font-size: 9.5px;
@@ -211,6 +226,20 @@
                     <div class="accepted-answers">
                         Accepted answers: {!! implode(', ', $q['accepted_answers_html']) !!}
                     </div>
+                @endif
+            @elseif ($q['question_type'] === 'algorithm_trace')
+                @if ($showAnswerKey)
+                    <div class="draw-box answer-key">
+                        <strong>Model answer / grading trace:</strong>
+                        <ol class="trace-steps">
+                            @foreach ($q['accepted_answers_html'] as $step)
+                                <li>{!! $step !!}</li>
+                            @endforeach
+                        </ol>
+                    </div>
+                @else
+                    {{-- Blank space for the student to draw the diagram on paper. --}}
+                    <div class="draw-box"></div>
                 @endif
             @endif
 

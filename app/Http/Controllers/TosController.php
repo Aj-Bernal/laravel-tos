@@ -532,6 +532,7 @@ class TosController extends Controller
                                 $attrs['correction'] = $q['is_true'] ? null : ($q['correction'] ?? null);
                                 break;
                             case 'enumeration':
+                            case 'algorithm_trace':
                                 $attrs['accepted_answers'] = $q['accepted_answers'] ?? [];
                                 break;
                             case 'multiple_choice':

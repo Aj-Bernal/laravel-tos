@@ -101,11 +101,13 @@
                             'multiple_choice' => 'Multiple Choice',
                             'modified_true_false' => 'Modified True or False',
                             'enumeration' => 'Enumeration',
+                            'algorithm_trace' => 'Algorithm Trace / Diagram',
                         ];
                         $typeOrder = [
                             'multiple_choice' => 0,
                             'modified_true_false' => 1,
                             'enumeration' => 2,
+                            'algorithm_trace' => 3,
                         ];
                         $orderedQuestions = $lesson->examQuestions
                             ->sortBy(fn ($q) => $typeOrder[$q->question_type ?? 'multiple_choice'] ?? 99)
@@ -148,6 +150,13 @@
                                             <li class="correct">{{ $answer }} &check;</li>
                                         @endforeach
                                     </ul>
+                                @elseif ($qType === 'algorithm_trace')
+                                    <p class="field-hint" style="margin:0.35rem 0 0;">Student draws the diagram on paper &mdash; model trace for grading:</p>
+                                    <ol class="options" style="padding-left:1.1rem;">
+                                        @foreach ($q->accepted_answers ?? [] as $step)
+                                            <li>{{ $step }}</li>
+                                        @endforeach
+                                    </ol>
                                 @endif
 
                                 @if ($q->rationale)

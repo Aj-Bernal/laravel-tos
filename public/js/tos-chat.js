@@ -273,11 +273,20 @@ window.addEventListener('error', function (e) {
             formData.append('course', course);
             formData.append('total_items', totalItems);
             lessons.forEach(function (lesson, i) {
+                // Backend (TosController::classifyAndBuildTos) validates a flat
+                // lessons.*.weight (single number) and lessons.*.objectives_text
+                // (one outcome per line) — it has no lessons[i][objectives][j][...]
+                // shape, so that nested per-objective format was silently ignored,
+                // leaving both required fields empty. Collapse to what it expects:
+                // lesson weight = sum of its outcomes' weights, objectives_text =
+                // newline-joined outcome text (per-outcome weight is dropped here,
+                // same as the manual form — the backend has no per-outcome weight).
+                const lessonWeight = lesson.objectives.reduce(function (sum, o) { return sum + o.weight; }, 0);
+                const objectivesText = lesson.objectives.map(function (o) { return o.text; }).join('\n');
+
                 formData.append('lessons[' + i + '][title]', lesson.title);
-                lesson.objectives.forEach(function (objective, j) {
-                    formData.append('lessons[' + i + '][objectives][' + j + '][text]', objective.text);
-                    formData.append('lessons[' + i + '][objectives][' + j + '][weight]', objective.weight);
-                });
+                formData.append('lessons[' + i + '][weight]', lessonWeight);
+                formData.append('lessons[' + i + '][objectives_text]', objectivesText);
                 formData.append('lessons[' + i + '][pdf]', lesson.pdfFile);
             });
 

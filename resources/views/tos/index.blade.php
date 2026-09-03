@@ -54,7 +54,29 @@
                 <input type="number" id="total_items" name="total_items" min="5" max="200" value="50" class="field-blank field-narrow">
             </div>
 
+            <div class="bulk-import-box">
+                <h2 class="section-title" style="margin-bottom:0.35rem;">Paste Lessons <span style="font-weight:400; color: var(--ink-soft); font-family: var(--font-body); font-size:0.85rem;">(optional &mdash; fills the panels below for you)</span></h2>
+                <p class="field-hint" style="margin:0 0 0.6rem;">
+                    Paste as many lessons as you want, then click Parse. Each lesson starts with
+                    <code>Lesson: &lt;title&gt;</code>, followed by an optional <code>Weight: &lt;hours&gt;</code> line,
+                    then one outcome per bullet &mdash; either plain (<code>- outcome</code>) or with its own weight
+                    (<code>- Weight: &lt;n&gt; | outcome</code>).
+                </p>
+                <textarea id="bulk-import-text" rows="8" class="field-ruled" placeholder="Lesson: Binary Search Trees
+Weight: 3
+- Weight: 1 | Students will state the binary search tree ordering property.
+- Weight: 2 | Students will design an algorithm to balance an unbalanced BST."></textarea>
+                <button type="button" class="btn-add-lesson" id="bulk-parse-btn" style="margin-top:0.6rem;">Parse &amp; Fill Panels</button>
+                <p class="field-hint" id="bulk-parse-result" style="display:none; margin-top:0.5rem;"></p>
+            </div>
+
             <h2 class="section-title">Lessons</h2>
+
+            <div class="field-group" id="ordered-pdf-group">
+                <label>Attach all lecture PDFs at once <span style="font-weight:400; color: var(--ink-soft); font-family: var(--font-body); font-size:0.85rem;">(select them in the same order as the lessons below &mdash; 1st file goes to Lesson 1, and so on)</span></label>
+                <input type="file" id="ordered-pdf-input" class="field-blank" accept="application/pdf,image/jpeg,image/png" multiple>
+                <p class="field-hint" id="ordered-pdf-confirm" style="display:none;"></p>
+            </div>
 
             <div id="lesson-panels"></div>
 
@@ -299,11 +321,137 @@
 
         panelsContainer.appendChild(clone);
         renumberPanels();
+        return panel;
     }
 
     addBtn.addEventListener('click', addLessonPanel);
     addLessonPanel();
     addLessonPanel();
+
+    // ---------- Bulk paste: "Lesson: X / Weight: N / bullets" -> panels ----------
+    // Accepts a lesson-level "Weight: N" line, plain bullets ("- outcome"),
+    // and per-outcome weighted bullets ("- Weight: N | outcome"). This is
+    // the ONLY thing that populates the required weight/objectives_text
+    // fields when lessons are pasted in bulk instead of typed per-panel —
+    // skipping it (e.g. a chat client that only attaches files) is exactly
+    // what produces "The lessons.N.weight field is required" errors.
+    function parseBulkLessons(text) {
+        const lessonHeaderRe = /^Lesson:\s*(.+)$/i;
+        const lessonWeightRe = /^Weight:\s*([\d.]+)\s*$/i;
+        const outcomeWeightRe = /^[-*]\s*Weight:\s*([\d.]+)\s*\|\s*(.+)$/i;
+        const plainBulletRe = /^[-*]\s+(.+)$/;
+
+        const blocks = [];
+        let current = null;
+
+        text.split(/\r?\n/).forEach((raw) => {
+            const line = raw.trim();
+            if (line === '') return;
+
+            const header = line.match(lessonHeaderRe);
+            if (header) {
+                if (current) blocks.push(current);
+                current = { title: header[1].trim(), weight: null, outcomeWeights: [], objectives: [] };
+                return;
+            }
+            if (!current) return; // ignore anything before the first "Lesson:" line
+
+            const lessonWeight = line.match(lessonWeightRe);
+            if (lessonWeight) {
+                current.weight = parseFloat(lessonWeight[1]);
+                return;
+            }
+
+            const outcomeWeight = line.match(outcomeWeightRe);
+            if (outcomeWeight) {
+                current.outcomeWeights.push(parseFloat(outcomeWeight[1]));
+                current.objectives.push(outcomeWeight[2].trim());
+                return;
+            }
+
+            const plain = line.match(plainBulletRe);
+            if (plain) {
+                current.objectives.push(plain[1].trim());
+                return;
+            }
+
+            // No bullet marker — still treat as an outcome line rather than
+            // silently dropping it.
+            current.objectives.push(line);
+        });
+        if (current) blocks.push(current);
+
+        return blocks
+            .map((l) => {
+                let weight = l.weight;
+                if (weight === null) {
+                    weight = l.outcomeWeights.length > 0
+                        ? l.outcomeWeights.reduce((a, b) => a + b, 0)
+                        : 1;
+                }
+                return { title: l.title, weight: weight, objectives_text: l.objectives.join('\n') };
+            })
+            .filter((l) => l.title && l.objectives_text);
+    }
+
+    const bulkParseBtn = document.getElementById('bulk-parse-btn');
+    const bulkResult = document.getElementById('bulk-parse-result');
+
+    bulkParseBtn.addEventListener('click', function () {
+        const parsed = parseBulkLessons(document.getElementById('bulk-import-text').value);
+
+        bulkResult.style.display = 'block';
+
+        if (parsed.length === 0) {
+            bulkResult.style.color = '#b3402a';
+            bulkResult.textContent = 'Could not find any "Lesson: ..." blocks in that text — nothing was changed.';
+            return;
+        }
+
+        panelsContainer.innerHTML = '';
+        lessonCount = 0;
+
+        parsed.forEach((lesson) => {
+            const panel = addLessonPanel();
+            panel.querySelector('[data-field="title"]').value = lesson.title;
+            panel.querySelector('[data-field="weight"]').value = lesson.weight;
+            panel.querySelector('[data-field="objectives_text"]').value = lesson.objectives_text;
+        });
+
+        bulkResult.style.color = 'var(--cvsu-green-deep)';
+        bulkResult.textContent = '✓ Parsed ' + parsed.length + ' lesson(s): ' + parsed.map((l) => l.title).join(', ')
+            + '. Now attach the PDFs (in the same order) below, or use "Attach all lecture PDFs at once" above.';
+    });
+
+    // ---------- Ordered multi-file PDF attach: fills each panel's file input in order ----------
+    const orderedPdfInput = document.getElementById('ordered-pdf-input');
+    const orderedPdfConfirm = document.getElementById('ordered-pdf-confirm');
+
+    orderedPdfInput.addEventListener('change', function () {
+        const files = Array.from(this.files || []);
+        const panels = Array.from(panelsContainer.querySelectorAll('[data-lesson-panel]'));
+
+        orderedPdfConfirm.style.display = 'block';
+
+        if (files.length !== panels.length) {
+            orderedPdfConfirm.style.color = '#b3402a';
+            orderedPdfConfirm.textContent = 'Selected ' + files.length + ' file(s) but there '
+                + (panels.length === 1 ? 'is' : 'are') + ' ' + panels.length
+                + ' lesson panel(s) — counts must match, in the same order. Nothing was assigned.';
+            return;
+        }
+
+        panels.forEach((panel, idx) => {
+            const fileInput = panel.querySelector('[data-field="pdf"]');
+            const dt = new DataTransfer();
+            dt.items.add(files[idx]);
+            fileInput.files = dt.files;
+            fileInput.dispatchEvent(new Event('change'));
+        });
+
+        orderedPdfConfirm.style.color = 'var(--cvsu-green-deep)';
+        orderedPdfConfirm.textContent = '✓ Assigned ' + files.length + ' file(s) to ' + panels.length + ' lesson(s), in order.';
+    });
 
     form.addEventListener('submit', async function (e) {
         e.preventDefault();

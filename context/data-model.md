@@ -7,9 +7,9 @@
 | `app/Models/TableOfSpecification.php` | TOS record; `hasMany` lessons/objectives/examQuestions |
 | `app/Models/Lesson.php` | One row per uploaded lesson PDF; quota + level distribution |
 | `app/Models/LearningObjective.php` | Classified objective; belongs to TOS + lesson |
-| `app/Models/ExamQuestion.php` | Generated question — NOTE: `$fillable` stale, see Gotchas |
-| `database/migrations/2026_07_08_000001_create_tos_exam_tables.php` | Creates the 4 TOS tables |
-| `database/migrations/2026_07_13_000000_add_question_type_fields_to_exam_questions_table.php` | Adds `question_type`/`is_true`/`correction`/`accepted_answers`; needs `doctrine/dbal` |
+| `app/Models/ExamQuestion.php` | Generated question — all three types (fillable + casts complete, fixed 2026-09-08) |
+| `database/migrations/2026_07_08_000001_create_tos_exam_tables.php` | Creates the 4 TOS tables (`options`/`correct_answer` nullable from day one) |
+| `database/migrations/2026_07_13_000000_add_question_type_fields_to_exam_questions_table.php` | Adds `question_type`/`is_true`/`correction`/`accepted_answers`; add-columns-only, no dbal required |
 
 ## Tables and relations
 
@@ -29,15 +29,14 @@
 
 ## Gotchas
 
-1. **`ExamQuestion::$fillable` is stale** — only
-   `tos_id, lesson_id, bloom_level, question, options, correct_answer, rationale`.
-   `TosController::persistLessonResults()` also passes `question_type`, `is_true`,
-   `correction`, `accepted_answers` → silently dropped by mass assignment.
-   Fix: add the four fields to `$fillable`, add casts
+1. **`ExamQuestion::$fillable` fixed 2026-09-08** — now carries `question_type`,
+   `is_true`, `correction`, `accepted_answers` with casts
    (`options`/`accepted_answers` → `array`, `is_true` → `boolean`).
-2. **2nd migration needs `doctrine/dbal`** for `->change()` on
-   `options`/`correct_answer` (make nullable — MTF/enumeration don't use them).
-   Package is NOT in `composer.json`; run `composer require doctrine/dbal` first on a fresh clone.
+   Locked by `tests/Feature/ExamQuestionTypePersistenceTest.php` — keep it green.
+2. **No `doctrine/dbal` needed (fixed 2026-09-08)** — the 2nd migration is
+   add-columns-only; `options`/`correct_answer` are nullable from the base
+   migration. Do NOT add `->change()` calls. Stale/partially-migrated dev DBs:
+   `migrate:fresh`.
 3. **Schema break**: `lesson_id` is now required on objectives/questions.
    Old DBs must `migrate:fresh` (or drop the 4 TOS tables manually, then `migrate`).
 4. `user_id` is nullable with `nullOnDelete`; no auth scoping anywhere (see history note

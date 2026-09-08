@@ -50,8 +50,13 @@ return new class extends Migration
             $table->foreignId('lesson_id')->constrained('lessons')->cascadeOnDelete();
             $table->string('bloom_level');
             $table->text('question');
-            $table->json('options');
-            $table->string('correct_answer', 1);
+            // Nullable from day one: Modified True-or-False and Enumeration
+            // questions don't use options / correct_answer (they use is_true
+            // + correction / accepted_answers instead, added in the
+            // 2026_07_13 migration). Keeping them nullable here avoids a
+            // ->change() alter later, which would require doctrine/dbal.
+            $table->json('options')->nullable();
+            $table->string('correct_answer', 1)->nullable();
             $table->text('rationale')->nullable();
             $table->timestamps();
         });

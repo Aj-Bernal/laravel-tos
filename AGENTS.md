@@ -45,8 +45,18 @@ php artisan bloom:train --epochs=300 --lr=0.5 # retrain classifier after editing
 
 1. **Route order matters** (`routes/web.php`): `/tos/{tos}` wildcard must stay AFTER `/tos/create`, `/tos/chat`, `/tos/history` — Laravel matches top-to-bottom.
 2. **README is stale on API keys**: code uses `GEMINI_API_KEY` (`ExamGeneratorService::MODEL = gemini-2.5-flash-lite`), README still says `ANTHROPIC_API_KEY`. Trust the code.
-3. **Second migration needs `doctrine/dbal`** (`2026_07_13_...` uses `->change()` on `options`/`correct_answer`) but dbal is NOT in `composer.json` — `composer require doctrine/dbal` before migrating fresh on a new clone.
-4. **`ExamQuestion` `$fillable` is stale** (`app/Models/ExamQuestion.php`): missing `question_type`, `is_true`, `correction`, `accepted_answers` — `persistLessonResults()` passes them to `create()` so they are silently dropped. Add them (plus casts) if question types misbehave.
+3. **No `doctrine/dbal` needed** (fixed 2026-09-08): `2026_07_13_...` is add-columns-only, and `options`/`correct_answer` are nullable from the base `2026_07_08_...` migration. Do NOT add `->change()` calls — they would reintroduce the dbal requirement. On a stale/partially-migrated dev DB, run `migrate:fresh`.
+4. **`ExamQuestion` `$fillable` fixed** (2026-09-08): carries `question_type`, `is_true`, `correction`, `accepted_answers` with casts (`options`/`accepted_answers` → `array`, `is_true` → `boolean`). Locked by `tests/Feature/ExamQuestionTypePersistenceTest.php` — keep it green.
 5. **Exam generation is slow by design**: `set_time_limit(300)` in controller; pooled Gemini calls (120s timeout each) + sequential 429/503 retry with backoff. Expect 10–30s+ per batch. Partial success returns HTTP 207 — check `errors` array, don't treat as full failure.
 6. **Scanned PDFs yield empty text** (`PdfTextExtractorService` = `smalot/pdfparser` only, no OCR): controller skips them and reports per-lesson; single-lesson retry route exists at `POST /tos/{tos}/lessons/{lesson}/generate-exam`.
 7. **Schema changed mid-project**: `learning_objectives`/`exam_questions` now require `lesson_id`. On an old DB, `migrate:fresh` (or manually drop the 4 TOS tables then `migrate`).
+
+## STATE.md Planning & Handoff Rules
+
+1. At planning stage, create the task plan inside `STATE.md` (project root).
+2. After every task completion, update the task list in `STATE.md`.
+3. Use `[ ]` for open tasks and `[x]` for completed tasks as checkmarks.
+4. At the top of each `## <Task / Feature Implementation name>` header, add a
+   date (`YYYY-MM-DD`).
+5. `STATE.md` is the cross-session context handoff — any new session resumes
+   by reading `STATE.md` first.

@@ -5,19 +5,13 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * NOTE: I inferred the table name as `exam_questions` from the
- * $lesson->examQuestions() / $tos->examQuestions() relations used in
- * _results.blade.php. Rename below if your actual table is different
- * (e.g. `exam_items`).
+ * Adds the three-question-type columns to `exam_questions`.
  *
- * ->change() on the existing `options` / `correct_answer` columns requires
- * doctrine/dbal:
- *   composer require doctrine/dbal
- * If you'd rather not add that dependency, drop the two ->change() lines
- * below — they're only there to make those columns nullable (Modified
- * True-or-False and Enumeration questions don't use them), and the app
- * will still work as long as your DB doesn't already enforce NOT NULL
- * on those columns at a level Laravel can't skip.
+ * NOTE: `options` / `correct_answer` are already nullable from the base
+ * create migration (2026_07_08), because Modified True-or-False and
+ * Enumeration questions don't use them — so this migration only ADDS
+ * columns and intentionally avoids ->change(), which would require
+ * doctrine/dbal. Do not add ->change() calls here.
  */
 return new class extends Migration
 {
@@ -28,11 +22,6 @@ return new class extends Migration
             $table->boolean('is_true')->nullable()->after('correct_answer');
             $table->text('correction')->nullable()->after('is_true');
             $table->json('accepted_answers')->nullable()->after('correction');
-        });
-
-        Schema::table('exam_questions', function (Blueprint $table) {
-            $table->json('options')->nullable()->change();
-            $table->string('correct_answer')->nullable()->change();
         });
     }
 

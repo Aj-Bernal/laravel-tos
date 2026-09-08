@@ -19,8 +19,13 @@ uses `->change()` (needs `doctrine/dbal`, which is NOT in `composer.json`
 `require`), so it is unclear the columns exist in any real database. No code
 changes made in this session — plan only.
 
-Work branch: `fix/question-type-persistence` (created 2026-09-08; all changes
-below live there, uncommitted — commit + PR from a machine with PHP).
+Work branch: `fix/question-type-persistence` — MERGED into `main` 2026-09-08
+(commit `79ad828`; post-merge suite still 22/1 with the same pre-existing
+`ExampleTest` failure). Merge note: `origin/main` had moved (PR #1,
+`context/` + full `AGENTS.md`); resolved an add/add conflict on `AGENTS.md`
+by keeping origin's file, appending the STATE.md rules section, and flipping
+Gotchas #3/#4 plus `context/data-model.md` to the fixed state. Not pushed —
+`git push` still pending whenever you want it upstream.
 
 - [x] 1. Verify migration status — done STATICALLY (no PHP runtime in this environment, so `migrate:status` could not run). Confirmed: base migration (`2026_07_08`) creates `options`/`correct_answer` as NOT NULL, and `2026_07_13` alters them via `->change()` with no `doctrine/dbal` in `composer.json` — so the chain is broken on ANY database, fresh or existing. Live `migrate:status` folded into item 7.
 - [x] 2. Decide dbal strategy: NO-DBAL route chosen (no new dependency, works uniformly on sqlite/mysql/pgsql). Implemented: base migration now declares `options`/`correct_answer` `->nullable()` at creation; `2026_07_13` reduced to add-columns-only, `->change()` block deleted, docblock rewritten. Anyone holding a partially-migrated dev DB should `migrate:fresh` (no production DB evidence in repo).

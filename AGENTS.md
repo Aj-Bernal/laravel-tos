@@ -24,7 +24,8 @@ composer install
 cp .env.example .env        # then ADD GEMINI_API_KEY=... (missing from .env.example, required)
 php artisan key:generate
 php artisan migrate
-php artisan bloom:train     # REQUIRED: builds storage/app/ml/bloom_model.json (not committed)
+php artisan bloom:train     # fallback small model; canonical is sklearn trainer below
+python scripts/bloom/build_samples_csv.py && python scripts/bloom/train_bloom_sklearn.py  # canonical: builds model JSON (see context/bloom-classifier.md)
 npm install; npm run build
 ```
 

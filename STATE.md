@@ -4,6 +4,19 @@
 > developer resuming work in a new session starts here: current goal, open
 > task plans, and per-task completion state.
 
+## 2026-09-19 — Python sklearn Bloom Trainer (PYTHON-SKLEARN-PLAN.md)
+
+Decisions (user): PH upweight 2x, Kaggle rewritten+included, CogBench silver excluded from core.
+Deviations: EDM 21k not publicly released (paper used private scraper; SteveLEEEEE unresolvable) — substituted with Kaggle 8.7k + itsskofficial screened OUT (label collapse: Eval 19 / Synth 2); frankwong2001 has no blooms set (only ssf-*) — jsano PH part kept. Active model path is `storage/app/private/ml/` (Laravel 12), not `storage/app/ml/`.
+Result: baseline PHP kept ACTIVE (holdout v2 98.3%); best sklearn candidate `data/bloom/candidate_C05_aw8.json` (holdout 91.7%, CogBench-gold OOD 81.6% vs baseline 51.8%). Cutover = open user decision.
+
+- [x] 1. Freeze baseline: `bloom:train` (356 train/63 val, vocab 799) + `data/bloom/baseline_v2.txt` (98.3%).
+- [x] 2. `scripts/bloom/build_samples_csv.py` → `data/bloom/samples.csv` (9,349 rows; Kaggle 8,767 + ph_k12 210 + anchor 419; 47 dupes dropped, 0 holdout leaks).
+- [x] 3. `scripts/bloom/train_bloom_sklearn.py` + `requirements-ml.txt` (parity analyzer, 80/20+70/30+5fold, .tex/.png/.csv artifacts, --grid-search, --anchor-weight).
+- [x] 4. Train C=1.0 (80/20 macro 0.79, CV 0.801) → C=0.5/anchor-x4 (macro 0.84, CV 0.831, gap 0.11) → C=0.5/anchor-x8 (macro ~0.84, CV 0.855, holdout 91.7%). Full 12-config grid deferred (each fit minutes; flag works).
+- [x] 5. Verify: `php artisan test` 22 passed/1 failed (pre-existing ExampleTest 404, unchanged); PHP smoke 4/4 incl. Tagalog; baseline restored as active with `.bak` rollback in place.
+- [x] 6. CUTOVER (user call 2026-09-19): CUT OVER to `candidate_C05_aw8.json` as active model. Baseline kept at `storage/app/private/ml/bloom_model.json.bak.php-baseline-20260919`. Post-cutover: holdout v2 91.7%, Bloom tests 16/16, PHP 1-per-level spot-check 6/6. Rollback = copy backup over active file.
+
 ## 2026-09-08 — Three Question Types Persistence (verdict item d)
 
 Context: verdict (d) claimed `ExamQuestion::$fillable` lacked `question_type`,

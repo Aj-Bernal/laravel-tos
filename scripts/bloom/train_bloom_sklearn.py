@@ -62,10 +62,11 @@ def load_samples(path: Path, ph_weight: int, anchor_weight: int = 1):
     return texts, labels
 
 
-def build_vectorizer(min_df: int):
-    from sklearn.feature_extraction.text import CountVectorizer
+def build_vectorizer(min_df: int, kind: str = "count"):
+    from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
-    return CountVectorizer(analyzer=analyzer, min_df=min_df)
+    cls = TfidfVectorizer if kind == "tfidf" else CountVectorizer
+    return cls(analyzer=analyzer, min_df=min_df)
 
 
 def build_model(C: float, max_iter: int, class_weight):
@@ -103,11 +104,12 @@ def eval_split(name: str, y_true, y_pred):
     }
 
 
-def save_artifacts(split_key: str, metrics: dict, outdir: Path):
+def save_artifacts(split_key: str, metrics: dict, outdir: Path, tag: str = ""):
+    suffix = f"_{tag}" if tag else ""
     levels = LEVELS
     rep = metrics["report"]
     # CSV + TeX classification report
-    csv_p = outdir / f"classification_report_{split_key}.csv"
+    csv_p = outdir / f"classification_report_{split_key}{suffix}.csv"
     with csv_p.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["level", "precision", "recall", "f1", "support"])
@@ -122,10 +124,10 @@ def save_artifacts(split_key: str, metrics: dict, outdir: Path):
         lines.append(f"{lv} & {r['precision']:.2f} & {r['recall']:.2f} & "
                      f"{r['f1-score']:.2f} & {int(r['support'])} \\\\")
     lines += ["\\hline", "\\end{tabular}"]
-    (outdir / f"classification_report_{split_key}.tex").write_text("\n".join(lines), encoding="utf-8")
+    (outdir / f"classification_report_{split_key}{suffix}.tex").write_text("\n".join(lines), encoding="utf-8")
     # Confusion matrix CSV + PNG heatmap
     cm = metrics["confusion_matrix"]
-    with (outdir / f"confusion_matrix_{split_key}.csv").open("w", newline="", encoding="utf-8") as f:
+    with (outdir / f"confusion_matrix_{split_key}{suffix}.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["actual/predicted"] + levels)
         for lv, row in zip(levels, cm):
@@ -144,7 +146,7 @@ def save_artifacts(split_key: str, metrics: dict, outdir: Path):
         ax.set_ylabel("Actual")
         ax.set_title(f"Confusion matrix ({split_key})")
         fig.tight_layout()
-        fig.savefig(outdir / f"confusion_matrix_{split_key}.png", dpi=120)
+        fig.savefig(outdir / f"confusion_matrix_{split_key}{suffix}.png", dpi=120)
         plt.close(fig)
     except Exception as e:
         print(f"WARN: heatmap failed ({e})", flush=True)
@@ -163,10 +165,16 @@ def main() -> int:
                     choices=["balanced", "none"])
     ap.add_argument("--ph-weight", type=int, default=2)
     ap.add_argument("--anchor-weight", type=int, default=1)
+    ap.add_argument("--vectorizer", default="count", choices=["count", "tfidf"],
+                    help="count=raw counts (PHP-compatible); tfidf=diagnostic only, "
+                         "JSON is NOT loadable by BloomClassifierService.")
     ap.add_argument("--grid-search", action="store_true")
     ap.add_argument("--cv", type=int, default=5)
     ap.add_argument("--no-export", action="store_true",
                     help="Evaluate only, do not overwrite model JSON.")
+    ap.add_argument("--tag", default="",
+                    help="Suffix for metric/report artifacts (e.g. kaggle), "
+                         "so per-source runs don't overwrite each other.")
     args = ap.parse_args()
 
     cw = None if args.class_weight == "none" else "balanced"
@@ -176,13 +184,13 @@ def main() -> int:
     if args.grid_search:
         from sklearn.model_selection import StratifiedKFold, GridSearchCV
 
-        vec = build_vectorizer(args.min_df)
+        vec = build_vectorizer(args.min_df, args.vectorizer)
         # Grid over C/min_df/class_weight would need re-vectorizing per min_df;
         # do manual loop so min_df is honored exactly.
         best = None
         results = []
         for min_df in (2, 5):
-            v = build_vectorizer(min_df)
+            v = build_vectorizer(min_df, args.vectorizer)
             X = v.fit_transform(texts)
             for C in (0.5, 1.0, 2.0, 4.0):
                 for cw_opt in ("balanced", None):
@@ -208,19 +216,24 @@ def main() -> int:
     outdir = Path(args.input).parent
     metrics: dict = {"C": args.C, "min_df": args.min_df, "seed": args.seed,
                      "class_weight": cw, "ph_weight": args.ph_weight,
-                     "anchor_weight": args.anchor_weight, "splits": {}}
+                     "anchor_weight": args.anchor_weight,
+                     "vectorizer": args.vectorizer, "tag": args.tag, "splits": {}}
 
-    vec = build_vectorizer(args.min_df)
+    vec = build_vectorizer(args.min_df, args.vectorizer)
     X_all = vec.fit_transform(texts)
     vocab = vec.get_feature_names_out().tolist()
     metrics["vocab_size"] = len(vocab)
-    print(f"Vocab size: {len(vocab)} (min_df={args.min_df})", flush=True)
+    print(f"Vocab size: {len(vocab)} (min_df={args.min_df}, vectorizer={args.vectorizer})", flush=True)
+    if args.vectorizer == "tfidf":
+        print("NOTE: tfidf run is diagnostic only — exported JSON would NOT be "
+              "loadable by PHP inference (raw-count contract).", flush=True)
 
     import numpy as np
 
     y_all = np.array(labels)
-    # Both holdout splits (plan Sec 4.3/5.1): 80/20 and 70/30.
-    for split, test_size, key in ((0.2, 0.2, "80_20"), (0.3, 0.3, "70_30")):
+    # Holdout splits: 80/20 and 70/30 (plan Sec 4.3/5.1) plus 60/40 stress split.
+    for split, test_size, key in ((0.2, 0.2, "80_20"), (0.3, 0.3, "70_30"),
+                                  (0.4, 0.4, "60_40")):
         Xtr, Xte, ytr, yte = train_test_split(
             X_all, y_all, test_size=test_size, random_state=args.seed, stratify=y_all)
         clf = build_model(args.C, args.max_iter, cw)
@@ -234,7 +247,7 @@ def main() -> int:
         if gap > 0.15:
             print("WARN: train - val > 0.15, overfit guard tripped (plan Sec 5).", flush=True)
         metrics["splits"][key] = m
-        save_artifacts(key, m, outdir)
+        save_artifacts(key, m, outdir, args.tag)
 
     # 5-fold CV macro F1
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=args.seed)
@@ -247,10 +260,17 @@ def main() -> int:
                      "folds": [float(s) for s in scores]}
 
     run_tag = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    if args.tag:
+        run_tag += f"_{args.tag}"
     (outdir / f"metrics_{run_tag}.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"\nMetrics -> {outdir / f'metrics_{run_tag}.json'}", flush=True)
 
     if not args.no_export:
+        if args.vectorizer == "tfidf" and "storage" in str(Path(args.out)):
+            print("REFUSED: tfidf JSON must not be exported to a storage/ live-model path "
+                  "(PHP inference is raw-count only). Re-run with --out under data/bloom/.",
+                  flush=True)
+            return 2
         final = build_model(args.C, args.max_iter, cw)
         final.fit(X_all, y_all)
         assert list(final.classes_) == [0, 1, 2, 3, 4, 5]

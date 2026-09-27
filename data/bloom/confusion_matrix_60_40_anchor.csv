@@ -1,0 +1,7 @@
+actual/predicted,Remembering,Understanding,Applying,Analyzing,Evaluating,Creating
+Remembering,31,0,1,2,0,1
+Understanding,0,23,2,0,1,1
+Applying,1,1,21,0,0,3
+Analyzing,0,0,1,20,3,2
+Evaluating,1,0,0,2,25,0
+Creating,0,2,2,0,0,22

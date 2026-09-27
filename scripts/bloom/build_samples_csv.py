@@ -171,6 +171,17 @@ def main() -> int:
         w.writerows(deduped)
 
     print(f"\nWrote {len(deduped)} rows -> {out}", flush=True)
+    # Per-source splits (same columns); combined file above is unchanged.
+    by_source: dict[str, list] = {}
+    for row in deduped:
+        by_source.setdefault(row[2], []).append(row)
+    for source, rows in sorted(by_source.items()):
+        sp = out.parent / f"samples_{source}.csv"
+        with sp.open("w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["text", "label", "source"])
+            w.writerows(rows)
+        print(f"Wrote {len(rows)} rows -> {sp}", flush=True)
     print(f"Dropped: {dropped_dupe} exact-dupes, {dropped_holdout} holdout-overlaps", flush=True)
     lvl = Counter(l for _, l, _ in deduped)
     print("\nStratified counts per level:", flush=True)

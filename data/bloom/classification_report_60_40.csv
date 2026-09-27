@@ -1,0 +1,7 @@
+level,precision,recall,f1,support
+Remembering,0.8111,0.7836,0.7971,1326
+Understanding,0.7066,0.75,0.7276,960
+Applying,0.8237,0.8169,0.8203,841
+Analyzing,0.7997,0.7795,0.7895,753
+Evaluating,0.9315,0.9216,0.9265,561
+Creating,0.9077,0.9371,0.9221,556

@@ -18,6 +18,7 @@ Result: baseline PHP kept ACTIVE (holdout v2 98.3%); best sklearn candidate `dat
 - [x] 6. CUTOVER (user call 2026-09-19): CUT OVER to `candidate_C05_aw8.json` as active model. Baseline kept at `storage/app/private/ml/bloom_model.json.bak.php-baseline-20260919`. Post-cutover: holdout v2 91.7%, Bloom tests 16/16, PHP 1-per-level spot-check 6/6. Rollback = copy backup over active file.
 - [x] 7. 2026-09-27: added 60/40 stress split + `--vectorizer {count,tfidf}` to trainer. A/B (C=0.5/anchor-x8): counts wins every split (60/40: 0.828 acc/0.844 macro vs tfidf 0.815/~0.83; CV 0.8548 vs 0.8365). TF-IDF stays diagnostic-only (trainer REFUSES tfidf export to storage/ paths — PHP is raw-count only). Live model unchanged (counts).
 - [x] 8. 2026-09-27: per-source CSVs (`samples_kaggle/ph_k12/anchor.csv`, combined untouched) + `--tag` artifacts. Per-source runs (C=0.5, counts): kaggle CV 0.794 + overfit trip all splits (noisy templates); anchor CV 0.861, stable ~0.83 (explains baseline holdout strength); ph_k12 80/20 0.91 but 60/40 0.80/gap 0.19 — tiny-data artifact, not real generalization. Combined stays the deployed blend.
+- [x] 9. 2026-09-27: findings PDF `data/bloom/bloom-session-findings.pdf` (3 pp: tokenizer, 60/40, TF-IDF, per-source, deployment). Uncommitted.
 
 ## 2026-09-08 — Three Question Types Persistence (verdict item d)
 

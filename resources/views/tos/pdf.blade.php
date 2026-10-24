@@ -161,25 +161,22 @@
 <table class="grid">
     <thead>
         <tr>
-            <th rowspan="2" style="width: 13%;">Course Outcomes</th>
-            <th rowspan="2" style="width: 13%;">Topic</th>
-            <th rowspan="2" style="width: 20%;">Intended Learning Outcomes (ILO)</th>
-            <th rowspan="2" style="width: 6%;">Instructional Time (Hours)</th>
-            <th colspan="6">Bloom's Taxonomy Level</th>
-            <th rowspan="2" style="width: 6%;">Actual Number of Items</th>
-            <th rowspan="2" style="width: 7%;">Percentage of Item Distribution (%)</th>
-        </tr>
-        <tr>
+            <th style="width: 13%;">COURSE<br>OUTCOMES</th>
+            <th style="width: 14%;">TOPIC</th>
+            <th style="width: 25%;">INTENDED LEARNING<br>OUTCOMES (ILO)<br><span style="font-size: 7.5px; font-weight: normal;">based on the approved syllabus</span></th>
+            <th style="width: 7%;">INSTRUCTIONAL<br>TIME<br>(HOURS)</th>
             @foreach ($levels as $level)
-                <th>{{ $level }}</th>
+                <th style="width: 5%;">{{ $level }}</th>
             @endforeach
+            <th style="width: 6%;">Actual<br>Number<br>of Items</th>
+            <th style="width: 7%;">Percentage<br>of Item<br>Distribution<br>(%)</th>
         </tr>
     </thead>
     <tbody>
         @foreach ($tos->lessons as $lesson)
             <tr>
                 @if ($loop->first)
-                    <td class="text-left" rowspan="{{ $rowCount }}">{{ $meta['course_outcome'] ?? '' }}</td>
+                    <td class="text-left" rowspan="{{ $rowCount }}">{{ $meta['course_outcome'] ?? $tos->course }}</td>
                 @endif
                 <td class="text-left">{{ $lesson->title }}</td>
                 <td class="text-left">
@@ -189,11 +186,14 @@
                                 <li>{{ $obj->objective_text }}</li>
                             @endforeach
                         </ul>
+                    @else
+                        {{ $lesson->title }}
                     @endif
                 </td>
                 <td>{{ rtrim(rtrim(number_format($lesson->weight, 2), '0'), '.') }}</td>
                 @foreach ($levels as $level)
-                    <td>{{ $lesson->level_distribution[$level] ?? 0 }}</td>
+                    @php $lvlCount = (int) ($lesson->level_distribution[$level] ?? 0); @endphp
+                    <td>{{ $lvlCount > 0 ? $lvlCount : '' }}</td>
                 @endforeach
                 <td><strong>{{ $lesson->item_quota }}</strong></td>
                 <td>{{ number_format(($lesson->weight / $totalWeight) * 100, 1) }}</td>
@@ -202,49 +202,48 @@
     </tbody>
     <tfoot>
         <tr>
-            <td colspan="3">TOTAL</td>
-            <td>{{ rtrim(rtrim(number_format($totalWeight, 2), '0'), '.') }}</td>
+            <td colspan="3" style="text-align: right; font-weight: bold; padding-right: 15px;">TOTAL</td>
+            <td><strong>{{ rtrim(rtrim(number_format($totalWeight, 2), '0'), '.') }}</strong></td>
             @foreach ($levels as $level)
-                <td>{{ $tos->distribution[$level]['item_count'] ?? 0 }}</td>
+                @php $totLvl = (int) ($tos->distribution[$level]['item_count'] ?? 0); @endphp
+                <td><strong>{{ $totLvl > 0 ? $totLvl : '' }}</strong></td>
             @endforeach
-            <td>{{ $grandTotalItems }}</td>
-            <td>100</td>
+            <td><strong>{{ $grandTotalItems }}</strong></td>
+            <td><strong>100</strong></td>
         </tr>
     </tfoot>
 </table>
 
-{{-- ============ Item Placement: Test Part (rows) x Easy/Moderate/Hard (columns) ============ --}}
-<h2 class="section-title">Item Placement</h2>
-<table class="grid">
-    <thead>
-        <tr>
-            <th class="col-part">Test Part</th>
-            <th>Easy ({{ $tierTotals['Easy'] }} items)</th>
-            <th>Moderate ({{ $tierTotals['Moderate'] }} items)</th>
-            <th>Hard ({{ $tierTotals['Hard'] }} items)</th>
-        </tr>
-    </thead>
-    <tbody>
-        @forelse ($itemPlacementGrid as $part => $byTier)
+@if ($tos->examQuestions->isNotEmpty())
+    {{-- ============ Item Placement: Test Part (rows) x Easy/Moderate/Hard (columns) ============ --}}
+    <h2 class="section-title">Item Placement</h2>
+    <table class="grid">
+        <thead>
             <tr>
-                <td><strong>{{ $part }}</strong></td>
-                @foreach (['Easy', 'Moderate', 'Hard'] as $tier)
-                    <td class="item-codes {{ empty($byTier[$tier]) ? 'empty-cell' : '' }}">
-                        {{ !empty($byTier[$tier]) ? implode(', ', $byTier[$tier]) : '-' }}
-                    </td>
-                @endforeach
+                <th class="col-part">Test Part</th>
+                <th>Easy ({{ $tierTotals['Easy'] }} items)</th>
+                <th>Moderate ({{ $tierTotals['Moderate'] }} items)</th>
+                <th>Hard ({{ $tierTotals['Hard'] }} items)</th>
             </tr>
-        @empty
-            <tr>
-                <td colspan="4" class="empty-cell">No exam items have been generated for this TOS yet.</td>
-            </tr>
-        @endforelse
-    </tbody>
-</table>
-<p class="placement-note">
-    Easy = Remembering, Understanding &middot; Moderate = Applying, Analyzing &middot; Hard = Evaluating, Creating.
-    Item codes reference the lesson letter and item number (e.g. "B4" = Lesson B, item 4).
-</p>
+        </thead>
+        <tbody>
+            @foreach ($itemPlacementGrid as $part => $byTier)
+                <tr>
+                    <td><strong>{{ $part }}</strong></td>
+                    @foreach (['Easy', 'Moderate', 'Hard'] as $tier)
+                        <td class="item-codes {{ empty($byTier[$tier]) ? 'empty-cell' : '' }}">
+                            {{ !empty($byTier[$tier]) ? implode(', ', $byTier[$tier]) : '-' }}
+                        </td>
+                    @endforeach
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+    <p class="placement-note">
+        Easy = Remembering, Understanding &middot; Moderate = Applying, Analyzing &middot; Hard = Evaluating, Creating.
+        Item codes reference the lesson letter and item number (e.g. "B4" = Lesson B, item 4).
+    </p>
+@endif
 
 {{-- ============ Signatures ============ --}}
 <table class="signatures">

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::middleware(['web'])->group(function () {
+    Route::get('/', [TosController::class, 'create'])->name('home');
     Route::get('/tos/create', [TosController::class, 'create'])->name('tos.create');
     Route::get('/tos/chat', function () {
         return view('tos.chat');

@@ -4,6 +4,24 @@
 > developer resuming work in a new session starts here: current goal, open
 > task plans, and per-task completion state.
 
+## 2026-10-24 — Standalone TOS Table PDF Generation & Terminal Output
+
+Goal: Generate TOS table PDF matching the user reference image directly upon processing objectives + PDF (deferring test generation for later), print the outputted result to the terminal upon input processing, and build an end-to-end test suite.
+
+- [x] 1. Design & implement `TosConsolePrinter` service to format and print the classified objectives, Bloom level confidence, TOS item allocation grid, and generated PDF link to the terminal (stdout).
+- [x] 2. Update `TosController::classifyAndBuildTos` to trigger terminal output when input is processed and support direct TOS PDF generation/export without requiring exam generation.
+- [x] 3. Refine `resources/views/tos/pdf.blade.php` to match the layout of the user's reference image:
+    - Exact headers: `COURSE OUTCOMES`, `TOPIC`, `INTENDED LEARNING OUTCOMES (ILO) based on the approved syllabus`, `INSTRUCTIONAL TIME (HOURS)`, `Remembering`, `Understanding`, `Applying`, `Analyzing`, `Evaluating`, `Creating`, `Actual Number of Items`, `Percentage of Item Distribution (%)`.
+    - Crisp borders, blank cells for zero values, and exact totals row.
+    - Omit the exam "Item Placement" section when generating standalone TOS table PDF.
+- [x] 4. Update `resources/views/tos/_results.blade.php` to feature immediate "Export / Download TOS Table (PDF)" right after building TOS (previously locked behind exam generation).
+- [x] 5. Implement Artisan CLI command `php artisan tos:process` to support CLI-based processing of objectives + PDF with terminal table output and PDF export file generation.
+- [x] 6. Create end-to-end Feature test (`tests/Feature/TosTableGenerationTest.php`) verifying:
+    - Web request processing (`POST /tos`) builds TOS, classifies objectives, and prints to terminal.
+    - Standalone TOS PDF export (`GET /tos/{tos}/export-pdf`) returns 200 with valid PDF binary and correct table content.
+    - CLI Artisan command (`tos:process`) processes inputs, outputs terminal table, and saves the PDF.
+- [x] 7. Run full test suite and verify everything passes cleanly.
+
 ## 2026-09-19 — Python sklearn Bloom Trainer (PYTHON-SKLEARN-PLAN.md)
 
 Decisions (user): PH upweight 2x, Kaggle rewritten+included, CogBench silver excluded from core.

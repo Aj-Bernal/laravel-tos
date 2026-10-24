@@ -205,16 +205,21 @@
         </table>
     @endif
 
-    @if ($tos->examQuestions->isNotEmpty())
-        <a href="{{ route('tos.export-exam-pdf', $tos) }}" target="_blank" class="btn-seal" style="display:inline-block; margin: 1rem 0 0.5rem;">
-            Export Generated Exam (PDF)
-        </a>
-        <p class="field-hint" style="margin-bottom: 1rem;">
-            Blank student copy — questions and options only, no answer key. Math renders the same as above.
+    {{-- Standalone TOS Table PDF Export --}}
+    <div class="tos-export-action-block" style="margin: 1.75rem 0 1rem; padding: 1.25rem; background: var(--paper-panel, #f9fbf9); border: 1.5px solid var(--cvsu-green-soft, #4a7c59); border-radius: 4px;">
+        <h3 style="font-size: 1.05rem; font-weight: bold; margin: 0 0 0.4rem; color: var(--cvsu-green-deep, #1e4528);">
+            Table of Specification PDF Ready
+        </h3>
+        <p class="field-hint" style="margin: 0 0 1rem;">
+            Generate and download your complete TOS table PDF matching the standard 12-column curriculum format.
         </p>
 
-        <details class="export-pdf-panel" style="margin: 1rem 0;">
-            <summary style="cursor:pointer; font-weight:600;">Export as CvSU Table of Specification (PDF)</summary>
+        <a href="{{ route('tos.export-pdf', $tos) }}" target="_blank" class="btn-seal" style="display:inline-block; text-decoration:none; padding: 0.75rem 1.4rem; font-size: 0.95rem;">
+            &darr; Download TOS Table (PDF)
+        </a>
+
+        <details class="export-pdf-panel" style="margin-top: 1.25rem;">
+            <summary style="cursor:pointer; font-weight:600; font-size: 0.88rem; color: var(--ink-soft, #555);">Customize header / signatures before downloading</summary>
             <form action="{{ route('tos.export-pdf', $tos) }}" method="GET" target="_blank" style="margin-top:0.75rem; display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
                 <input type="text" name="department" placeholder="Department (optional)">
                 <input type="text" name="semester" placeholder="Semester, e.g. 2nd Semester (optional)">
@@ -231,24 +236,36 @@
                 <input type="text" name="reviewed_by_title" placeholder="Reviewed by — title (optional)">
                 <input type="text" name="approved_by" placeholder="Approved by — name (optional)">
                 <input type="text" name="approved_by_title" placeholder="Approved by — title (optional)">
-                <button type="submit" class="btn-seal" style="grid-column: 1 / -1;">Download PDF</button>
+                <button type="submit" class="btn-seal" style="grid-column: 1 / -1;">Download Customized PDF</button>
             </form>
             <p class="field-hint" style="margin-top:0.5rem;">
-                Anything left blank prints as a blank line on the form, same as a paper copy you'd fill in by hand.
+                Anything left blank prints with default / blank lines for paper signing.
             </p>
         </details>
-    @endif
+    </div>
 
-    @if ($tos->examQuestions->isEmpty())
-        <form id="generate-exam-form" data-action="{{ route('tos.generate-exam', $tos) }}">
-            @csrf
-            <button type="submit" class="btn-seal btn-generate" id="generate-exam-btn">
-                <span class="btn-label">Generate Exam from All Lesson PDFs</span>
-            </button>
-            <p class="field-hint" id="generate-wait-hint" style="display:none; margin-top:0.75rem;">
-                Generating questions for every lesson &mdash; this can take a minute or two. Please don't navigate away.
-            </p>
-        </form>
+    @if ($tos->examQuestions->isNotEmpty())
+        <a href="{{ route('tos.export-exam-pdf', $tos) }}" target="_blank" class="btn-seal" style="display:inline-block; margin: 1rem 0 0.5rem;">
+            Export Generated Exam (PDF)
+        </a>
+        <p class="field-hint" style="margin-bottom: 1rem;">
+            Blank student copy — questions and options only, no answer key. Math renders the same as above.
+        </p>
+    @else
+        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px dashed var(--paper-line, #ccc);">
+            <h3 style="font-size: 0.95rem; font-weight: bold; margin-bottom: 0.4rem; color: var(--ink-soft, #666);">
+                Exam Question Generation (Optional / Coming Later)
+            </h3>
+            <form id="generate-exam-form" data-action="{{ route('tos.generate-exam', $tos) }}">
+                @csrf
+                <button type="submit" class="btn-seal btn-generate" id="generate-exam-btn" style="opacity: 0.9;">
+                    <span class="btn-label">Generate Exam Questions from Lesson PDFs</span>
+                </button>
+                <p class="field-hint" id="generate-wait-hint" style="display:none; margin-top:0.75rem;">
+                    Generating questions for every lesson &mdash; this can take a minute or two. Please don't navigate away.
+                </p>
+            </form>
+        </div>
     @endif
 
 </div>
